@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Big Bear Mountain Resort Status</title>
+  <style>
+    :root {
+      --primary-color: #0056b3;
+      --primary-dark: #003d7a;
+      --secondary-color: #f8f9fa;
+      --success-color: #28a745;
+      --warning-color: #ffc107;
+      --danger-color: #dc3545;
+      --info-color: #17a2b8;
+      --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f5f5f5;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+
+    header {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 20px 0;
+      box-shadow: var(--shadow);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 2rem;
+    }
+
+    header p {
+      opacity: 0.8;
+      font-size: 1rem;
+    }
+
+    .dashboard {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .resort-card {
+      flex: 1;
+      min-width: 300px;
+      background-color: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .resort-header {
+      background-color: var(--primary-color);
+      color: white;
+      padding: 15px;
+      position: relative;
+    }
+
+    .resort-header h2 {
+      margin: 0;
+      font-size: 1.5rem;
+    }
+
+    .status-section {
+      padding: 20px;
+    }
+
+    .status-section h3 {
+      font-size: 1.2rem;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-count {
+      font-size: 0.9rem;
+      color: #666;
+      font-weight: normal;
+    }
+
+    .status-list {
+      list-style: none;
+    }
+
+    .status-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0f0;
+    }
+
+    .status-name {
+      font-weight: 500;
+    }
+
+    .status-badge {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-align: center;
+      min-width: 80px;
+    }
+
+    .status-open {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    .status-closed {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+
+    .status-limited {
+      background-color: #fff3cd;
+      color: #856404;
+    }
+
+    .status-maintenance {
+      background-color: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .status-unknown {
+      background-color: #e2e3e5;
+      color: #383d41;
+    }
+
+    .timestamp {
+      text-align: center;
+      color: #666;
+      margin-top: 30px;
+      font-size: 0.9rem;
+    }
+
+    .refresh-btn {
+      background-color: var(--primary-color);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1rem;
+      margin-bottom: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .refresh-btn:hover {
+      background-color: var(--primary-dark);
+    }
+
+    .refresh-btn:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .refresh-icon {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid white;
+      border-radius: 50%;
+      border-top-color: transparent;
+    }
+
+    .spin {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .loading-indicator {
+      text-align: center;
+      padding: 40px;
+      color: #666;
+    }
+
+    .no-data {
+      text-align: center;
+      padding: 30px;
+      color: #666;
+      font-style: italic;
+    }
+
+    @media (max-width: 768px) {
+      .dashboard {
+        flex-direction: column;
+      }
+
+      .resort-card {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="container">
+    <h1>Big Bear Mountain Resort Status</h1>
+    <p>Live status information for Snow Valley, Snow Summit, and Bear Mountain</p>
+  </div>
+</header>
+
+<div class="container">
+  <button id="refreshBtn" class="refresh-btn">
+    <span id="refreshIcon" class="refresh-icon"></span>
+    Refresh Data
+  </button>
+
+  <div id="dashboard" class="dashboard">
+    <div class="loading-indicator">
+      Loading resort data...
+    </div>
+  </div>
+
+  <div id="timestamp" class="timestamp"></div>
+</div>
+
+<script>
+  // DOM elements
+  const dashboard = document.getElementById('dashboard');
+  const timestampElem = document.getElementById('timestamp');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const refreshIcon = document.getElementById('refreshIcon');
+
+  // Resort data
+  let resortData = null;
+  let useLocalMockData = false; // Set to false to use real API
+
+  // Function to determine status badge class
+  function getStatusClass(status) {
+    if (!status) return 'status-unknown';
+
+    const lowerStatus = status.toLowerCase();
+
+    if (lowerStatus.includes('open')) {
+      return 'status-open';
+    } else if (lowerStatus.includes('closed')) {
+      return 'status-closed';
+    } else if (lowerStatus.includes('limited') || lowerStatus.includes('partial') || lowerStatus.includes('hold')) {
+      return 'status-limited';
+    } else if (lowerStatus.includes('maintenance') || lowerStatus.includes('scheduled')) {
+      return 'status-maintenance';
+    } else {
+      return 'status-unknown';
+    }
+  }
+
+  // Function to create the resort cards
+  function createResortCards(data) {
+    if (!data || !data.locations) {
+      dashboard.innerHTML = '<div class="no-data">No resort data available</div>';
+      return;
+    }
+
+    // Clear the dashboard
+    dashboard.innerHTML = '';
+
+    // Location names mapping
+    const locationNames = {
+      snowValley: 'Snow Valley',
+      snowSummit: 'Snow Summit',
+      bearMountain: 'Bear Mountain'
+    };
+
+    // Create a card for each location
+    for (const [locationKey, locationData] of Object.entries(data.locations)) {
+      const locationName = locationNames[locationKey] || locationKey;
+
+      // Create the resort card
+      const card = document.createElement('div');
+      card.className = 'resort-card';
+
+      // Create the header
+      const header = document.createElement('div');
+      header.className = 'resort-header';
+      header.innerHTML = `<h2>${locationName}</h2>`;
+      card.appendChild(header);
+
+      // Create lift status section
+      if (locationData.lifts && locationData.lifts.length > 0) {
+        const liftsSection = document.createElement('div');
+        liftsSection.className = 'status-section';
+
+        const liftHeader = document.createElement('h3');
+        liftHeader.innerHTML = `Lifts <span class="status-count">(${locationData.lifts.length})</span>`;
+        liftsSection.appendChild(liftHeader);
+
+        const liftsList = document.createElement('ul');
+        liftsList.className = 'status-list';
+
+        locationData.lifts.forEach(lift => {
+          const item = document.createElement('li');
+          item.className = 'status-item';
+
+          const statusClass = getStatusClass(lift.status);
+
+          item.innerHTML = `
+                            <span class="status-name">${lift.name}</span>
+                            <span class="status-badge ${statusClass}">${lift.status}</span>
+                        `;
+
+          liftsList.appendChild(item);
+        });
+
+        liftsSection.appendChild(liftsList);
+        card.appendChild(liftsSection);
+      }
+
+      // Create trail status section
+      if (locationData.trails && locationData.trails.length > 0) {
+        const trailsSection = document.createElement('div');
+        trailsSection.className = 'status-section';
+
+        const trailHeader = document.createElement('h3');
+        trailHeader.innerHTML = `Trails <span class="status-count">(${locationData.trails.length})</span>`;
+        trailsSection.appendChild(trailHeader);
+
+        const trailsList = document.createElement('ul');
+        trailsList.className = 'status-list';
+
+        locationData.trails.forEach(trail => {
+          const item = document.createElement('li');
+          item.className = 'status-item';
+
+          const statusClass = getStatusClass(trail.status);
+
+          item.innerHTML = `
+                            <span class="status-name">${trail.name}</span>
+                            <span class="status-badge ${statusClass}">${trail.status}</span>
+                        `;
+
+          trailsList.appendChild(item);
+        });
+
+        trailsSection.appendChild(trailsList);
+        card.appendChild(trailsSection);
+      }
+
+      // Handle empty data case
+      if ((!locationData.lifts || locationData.lifts.length === 0) &&
+              (!locationData.trails || locationData.trails.length === 0)) {
+        const noDataSection = document.createElement('div');
+        noDataSection.className = 'no-data';
+        noDataSection.textContent = `No data available for ${locationName}`;
+        card.appendChild(noDataSection);
+      }
+
+      dashboard.appendChild(card);
+    }
+
+    // Update timestamp
+    if (data.timestamp) {
+      const timestamp = new Date(data.timestamp);
+      timestampElem.textContent = `Last updated: ${timestamp.toLocaleString()}`;
+    }
+  }
+
+  // Function to get mock data for development
+  function getMockData() {
+    return {
+      timestamp: new Date().toISOString(),
+      locations: {
+        snowValley: {
+          lifts: [
+            { name: 'Chair 1', status: 'Open' },
+            { name: 'Chair 2', status: 'Closed' },
+            { name: 'Chair 3', status: 'Open' },
+            { name: 'Chair 4', status: 'Maintenance' }
+          ],
+          trails: [
+            { name: 'Westridge', status: 'Open' },
+            { name: 'Snow Valley Run', status: 'Open' },
+            { name: 'Slide Peak', status: 'Closed for Season' },
+            { name: 'Rim Trail', status: 'Limited' }
+          ]
+        },
+        snowSummit: {
+          lifts: [
+            { name: 'Summit Express', status: 'Open' },
+            { name: 'East Mountain Express', status: 'Open' },
+            { name: 'Chair 4', status: 'Open' },
+            { name: 'Chair 6', status: 'Open' },
+            { name: 'Chair 8', status: 'Closed' }
+          ],
+          trails: [
+            { name: 'Miracle Mile', status: 'Open' },
+            { name: 'Summit Run', status: 'Open' },
+            { name: 'Log Chute', status: 'Limited' },
+            { name: 'Westridge', status: 'Open' },
+            { name: 'Wall Street', status: 'Closed' }
+          ]
+        },
+        bearMountain: {
+          lifts: [
+            { name: 'Express 1', status: 'Open' },
+            { name: 'Express 2', status: 'Open' },
+            { name: 'Express 9', status: 'Open' },
+            { name: 'Chair 7', status: 'Closed' }
+          ],
+          trails: [
+            { name: 'Central Park', status: 'Open' },
+            { name: 'Park Run', status: 'Open' },
+            { name: 'Goldmine Mountain', status: 'Closed' },
+            { name: 'Outlaw', status: 'Open' },
+            { name: 'Exhibition', status: 'Limited' }
+          ]
+        }
+      }
+    };
+  }
+
+  // Function to fetch resort data
+  async function fetchResortData(forceRefresh = false) {
+    try {
+      // Disable the refresh button and add spinning animation
+      refreshBtn.disabled = true;
+      refreshIcon.classList.add('spin');
+
+      // Show loading indicator if it's the first load
+      if (!resortData) {
+        dashboard.innerHTML = '<div class="loading-indicator">Loading resort data...</div>';
+      }
+
+      if (useLocalMockData) {
+        // Use mock data for development
+        setTimeout(() => {
+          const data = getMockData();
+          resortData = data;
+          createResortCards(data);
+
+          // Re-enable the refresh button and stop the animation
+          refreshBtn.disabled = false;
+          refreshIcon.classList.remove('spin');
+        }, 1000); // Simulate network delay
+      } else {
+        // Use real Firebase function
+        const apiUrl = "https://us-central1-bigbearscrapertest.cloudfunctions.net/getResortData";
+
+        // Add force parameter if needed
+        const url = forceRefresh ? `${apiUrl}?force=true` : apiUrl;
+
+        // Fetch data from API
+        const response = await fetch(url);
+
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        resortData = data;
+        createResortCards(data);
+
+        // Re-enable the refresh button and stop the animation
+        refreshBtn.disabled = false;
+        refreshIcon.classList.remove('spin');
+      }
+    } catch (error) {
+      console.error('Error fetching resort data:', error);
+      dashboard.innerHTML = `
+                    <div class="no-data">
+                        Failed to load resort data: ${error.message}<br>
+                        Please try again later.
+                    </div>
+                `;
+
+      // Re-enable the refresh button and stop the animation
+      refreshBtn.disabled = false;
+      refreshIcon.classList.remove('spin');
+    }
+  }
+
+  // Initial fetch
+  fetchResortData();
+
+  // Add event listener to refresh button
+  refreshBtn.addEventListener('click', () => {
+    fetchResortData(true);
+  });
+
+  // Auto-refresh every 5 minutes
+  setInterval(() => {
+    fetchResortData();
+  }, 5 * 60 * 1000);
+</script>
+</body>
+</html>
