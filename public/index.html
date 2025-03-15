@@ -217,6 +217,45 @@
       margin: 20px 0;
     }
 
+    .debug-panel {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-x: auto;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    .source-info {
+      display: inline-block;
+      padding: 3px 8px;
+      margin-left: 10px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      background-color: #e2e3e5;
+      color: #383d41;
+    }
+
+    .source-fresh {
+      background-color: #d4edda;
+      color: #155724;
+    }
+
+    .source-cache {
+      background-color: #d1ecf1;
+      color: #0c5460;
+    }
+
+    .source-fallback {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+
     @media (max-width: 768px) {
       .dashboard {
         flex-direction: column;
@@ -242,6 +281,8 @@
     Refresh Data
   </button>
 
+  <div id="error-container" class="error-message" style="display:none"></div>
+
   <div id="dashboard" class="dashboard">
     <div class="loading-indicator">
       Loading resort data...
@@ -249,6 +290,8 @@
   </div>
 
   <div id="timestamp" class="timestamp"></div>
+
+  <div class="debug-panel" id="debug-panel"></div>
 </div>
 
 <script>
@@ -257,11 +300,13 @@
   const timestampElem = document.getElementById('timestamp');
   const refreshBtn = document.getElementById('refreshBtn');
   const refreshIcon = document.getElementById('refreshIcon');
+  const errorContainer = document.getElementById('error-container');
+  const debugPanel = document.getElementById('debug-panel');
 
   // Resort data
   let resortData = null;
 
-  // IMPORTANT: Use the direct function URL that's proven to work
+  // API URL - direct HTTPS endpoint
   const apiUrl = "https://getresortdata-j3cdicoira-uc.a.run.app";
 
   // Function to determine status badge class
@@ -287,6 +332,9 @@
   function createResortCards(data) {
     console.log("Creating resort cards with data:", data);
 
+    // Show the data in the debug panel
+    debugPanel.textContent = JSON.stringify(data, null, 2);
+
     if (!data || !data.locations) {
       dashboard.innerHTML = '<div class="no-data">No resort data available</div>';
       return;
@@ -294,6 +342,7 @@
 
     // Clear the dashboard
     dashboard.innerHTML = '';
+    errorContainer.style.display = 'none';
 
     // Location names mapping
     const locationNames = {
@@ -389,14 +438,35 @@
       dashboard.appendChild(card);
     }
 
-    // Update timestamp
+    // Update timestamp and source info
     if (data.timestamp) {
       const timestamp = new Date(data.timestamp);
-      timestampElem.textContent = `Last updated: ${timestamp.toLocaleString()}`;
+      let sourceHtml = `Last updated: ${timestamp.toLocaleString()}`;
+
+      // Add source info if available
+      if (data._meta && data._meta.source) {
+        let sourceClass = '';
+        switch(data._meta.source) {
+          case 'fresh_api':
+            sourceClass = 'source-fresh';
+            break;
+          case 'cache':
+            sourceClass = 'source-cache';
+            break;
+          case 'fallback':
+          case 'error_fallback':
+            sourceClass = 'source-fallback';
+            break;
+        }
+
+        sourceHtml += ` <span class="source-info ${sourceClass}">${data._meta.source}</span>`;
+      }
+
+      timestampElem.innerHTML = sourceHtml;
     }
   }
 
-  // Function to fetch resort data with error handling
+  // Function to fetch resort data
   async function fetchResortData(forceRefresh = false) {
     try {
       // Disable the refresh button and add spinning animation
@@ -410,120 +480,89 @@
 
       // Add timestamp to prevent caching
       const timestamp = new Date().getTime();
+
+      // Add force parameter if needed
       const url = forceRefresh ?
               `${apiUrl}?force=true&t=${timestamp}` :
               `${apiUrl}?t=${timestamp}`;
 
       console.log(`Fetching data from URL: ${url}`);
 
-      // Fetch data with error handling
-      const response = await fetch(url);
-      console.log("Response status:", response.status);
+      // DIRECT METHOD - Use XMLHttpRequest instead of fetch for better error handling
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url);
 
-      if (!response.ok) {
-        throw new Error(`Server responded with status ${response.status}`);
-      }
+      // Set request headers
+      xhr.setRequestHeader('Cache-Control', 'no-cache');
 
-      const data = await response.json();
-      console.log("Received data:", data);
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            const data = JSON.parse(xhr.responseText);
+            console.log("Received data:", data);
 
-      if (!data || !data.locations) {
-        throw new Error("Invalid data format received from server");
-      }
+            // Check if we got any lifts
+            if (data.locations) {
+              console.log("Snow Valley lifts:", data.locations.snowValley?.lifts?.length || 0);
+              console.log("Snow Summit lifts:", data.locations.snowSummit?.lifts?.length || 0);
+              console.log("Bear Mountain lifts:", data.locations.bearMountain?.lifts?.length || 0);
+            }
 
-      // Log lift counts for debugging
-      console.log(`Snow Valley lifts: ${data.locations.snowValley?.lifts?.length || 0}`);
-      console.log(`Snow Summit lifts: ${data.locations.snowSummit?.lifts?.length || 0}`);
-      console.log(`Bear Mountain lifts: ${data.locations.bearMountain?.lifts?.length || 0}`);
+            resortData = data;
+            createResortCards(data);
+          } catch (e) {
+            console.error("Error parsing JSON:", e);
+            errorContainer.style.display = 'block';
+            errorContainer.textContent = `Error parsing data from server: ${e.message}`;
+          }
+        } else {
+          console.error("Error response:", xhr.status);
+          errorContainer.style.display = 'block';
+          errorContainer.textContent = `Server returned error: ${xhr.status} ${xhr.statusText}`;
+        }
 
-      resortData = data;
-      createResortCards(data);
+        // Re-enable the refresh button and stop the animation
+        refreshBtn.disabled = false;
+        refreshIcon.classList.remove('spin');
+      };
+
+      xhr.onerror = function() {
+        console.error("Network error occurred");
+        errorContainer.style.display = 'block';
+        errorContainer.textContent = "Network error: Could not connect to the server";
+
+        // Re-enable the refresh button and stop the animation
+        refreshBtn.disabled = false;
+        refreshIcon.classList.remove('spin');
+      };
+
+      xhr.ontimeout = function() {
+        console.error("Request timed out");
+        errorContainer.style.display = 'block';
+        errorContainer.textContent = "Request timed out: The server took too long to respond";
+
+        // Re-enable the refresh button and stop the animation
+        refreshBtn.disabled = false;
+        refreshIcon.classList.remove('spin');
+      };
+
+      // Send the request
+      xhr.send();
+
     } catch (error) {
-      console.error('Error fetching resort data:', error);
+      console.error('Error in fetchResortData:', error);
 
-      dashboard.innerHTML = `
-        <div class="error-message">
-          Failed to load resort data: ${error.message}
-          <br><br>
-          Please try again later.
-        </div>
-      `;
+      errorContainer.style.display = 'block';
+      errorContainer.textContent = `Error: ${error.message}. Please try again later.`;
 
-      // For debugging - use mock data as fallback
-      if (location.search.includes('usemock=true')) {
-        console.log("Using mock data as fallback");
-        const mockData = getMockData();
-        createResortCards(mockData);
-      }
-    } finally {
       // Re-enable the refresh button and stop the animation
       refreshBtn.disabled = false;
       refreshIcon.classList.remove('spin');
     }
   }
 
-  // Mock data for testing
-  function getMockData() {
-    return {
-      timestamp: new Date().toISOString(),
-      locations: {
-        snowValley: {
-          lifts: [
-            { name: "Chair 1", status: "Open" },
-            { name: "MC 16", status: "Open" },
-            { name: "Chair 2", status: "Open" },
-            { name: "Chair 3", status: "Closed" },
-            { name: "Chair 6", status: "Closed" },
-            { name: "Chair 8", status: "Closed" },
-            { name: "Chair 9", status: "Closed" },
-            { name: "Chair 11", status: "Closed" },
-            { name: "Chair 12", status: "Closed" },
-            { name: "Chair 13", status: "Open" }
-          ],
-          trails: [
-            { name: "Westridge", status: "Open" },
-            { name: "Snow Valley Run", status: "Open" },
-            { name: "Slide Peak", status: "Closed for Season" },
-            { name: "Rim Trail", status: "Limited" }
-          ]
-        },
-        snowSummit: {
-          lifts: [
-            { name: "Summit Express", status: "Open" },
-            { name: "East Mountain Express", status: "Open" },
-            { name: "Chair 4", status: "Open" },
-            { name: "Chair 6", status: "Open" },
-            { name: "Chair 8", status: "Closed" }
-          ],
-          trails: [
-            { name: "Miracle Mile", status: "Open" },
-            { name: "Summit Run", status: "Open" },
-            { name: "Log Chute", status: "Limited" },
-            { name: "Westridge", status: "Open" },
-            { name: "Wall Street", status: "Closed" }
-          ]
-        },
-        bearMountain: {
-          lifts: [
-            { name: "Express 1", status: "Open" },
-            { name: "Express 2", status: "Open" },
-            { name: "Express 9", status: "Open" },
-            { name: "Chair 7", status: "Closed" }
-          ],
-          trails: [
-            { name: "Central Park", status: "Open" },
-            { name: "Park Run", status: "Open" },
-            { name: "Goldmine Mountain", status: "Closed" },
-            { name: "Outlaw", status: "Open" },
-            { name: "Exhibition", status: "Limited" }
-          ]
-        }
-      }
-    };
-  }
-
-  // Initial fetch
-  fetchResortData(true); // Force refresh on initial load
+  // Initial fetch with force refresh
+  fetchResortData(true);
 
   // Add event listener to refresh button
   refreshBtn.addEventListener('click', () => {
